@@ -1,0 +1,101 @@
+---
+title: "Prediction Assignment"
+author: "Massoud Mazar"
+date: "September 16, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+
+## Prepararions
+
+Training and testing data can be loaded as follows:
+
+```{r cache=TRUE}
+training <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+testing <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+```
+
+And we will need some machine learning and plot packages:
+
+```{r cache=TRUE}
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(es1071)
+library(parallel)
+library(doParallel)
+```
+
+## Exploring the Data
+
+Data set contains 160 variables, from which we are only using accelerometers on the belt, forearm, arm, and dumbell to predict class. Since the testing dataset does not contain classe values, we call the training set "data" and use 75% of it to train and remaining 25% to validate our model.
+
+```{r cache=TRUE}
+columns <- grep("^accel", colnames(training), value = TRUE)
+data <- training[ , c(columns, "classe")]
+test <- testing[ , columns]
+
+set.seed(33221)
+inTrain <- createDataPartition(y=data$classe, p=0.75, list=FALSE)
+trainset <- data[inTrain,]
+validation <- data[-inTrain,]
+```
+
+Now let's see if there is any correlation between the accelerometer readings. Here we find variables which have correlation greater than 0.8:
+
+```{r cache=TRUE}
+M <- abs(cor(trainset[,-13]))
+diag(M) <- 0
+which(M > 0.8, arr.ind = T)
+```
+
+So accel_belt_y and accel_belt_z are correlated. For this reason we will preprocess the data using PCA (principal Components Analysis) to reduce number of variables.
+
+## Model Comparison
+
+We will compare multiple models to find the most accurate model for predicting classe based on the accellerometer readings. Models compared here are CART (rpart), Random Forest, Support Vector Machine (Radial), Linear Discriminant Analysis and Naive Bayes. Parallel processing should be enabled as Random Forest and SVM are very processing intensive. A trainControl object is created to allow all models use the same control parameters such as enabling parallel processing and using 10 fold cross validation.
+
+```{r cache=TRUE}
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE, preProcOptions="pca")
+
+modrf <- train(classe ~ ., data=trainset, method="rf", trControl = fitControl)
+modsvm <- train(classe ~ ., data=trainset, method="svmRadial", trControl = fitControl)
+modnb <- train(classe ~ ., data=trainset, method="nb", trControl = fitControl)
+modlda <- train(classe ~ ., data=trainset, method="lda", trControl = fitControl)
+modrpart <- train(classe ~ ., data=trainset, method="rpart", trControl = fitControl)
+```
+
+Here is comparison of the Accuracy of these models using Validation data set:
+
+```{r cache=TRUE}
+rfa <- confusionMatrix(validation$classe, predict(modrf, validation))$overall['Accuracy']
+svma <- confusionMatrix(validation$classe, predict(modsvm, validation))$overall['Accuracy']
+nba <- confusionMatrix(validation$classe, predict(modnb, validation))$overall['Accuracy']
+ldaa <- confusionMatrix(validation$classe, predict(modlda, validation))$overall['Accuracy']
+rparta <- confusionMatrix(validation$classe, predict(modrpart, validation))$overall['Accuracy']
+
+model <- c("Random Forest", "SVM Radial", "Naive Bayes", "Linear Discriminant Analysis", "CART")
+Accuracy <- c(rfa, svma, nba, ldaa, rparta)
+cbind(model, Accuracy)
+```
+
+```{r echo=FALSE}
+stopCluster(cluster)
+registerDoSEQ()
+```
+## Results
+
+Random Forest produced the best accuracy, so we are using this model to predict classe for the 20 observations in the testing data set.
+
+```{r cache=TRUE}
+predict(modrf, testing)
+```
