@@ -24,11 +24,11 @@ testing <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml
 
 And we will need some machine learning and plot packages:
 
-```{r cache=TRUE}
+```{r cache=TRUE, message=FALSE}
 library(ggplot2)
 library(caret)
 library(randomForest)
-library(es1071)
+library(e1071)
 library(parallel)
 library(doParallel)
 ```
@@ -60,16 +60,15 @@ So accel_belt_y and accel_belt_z are correlated. For this reason we will preproc
 
 ## Model Comparison
 
-We will compare multiple models to find the most accurate model for predicting classe based on the accellerometer readings. Models compared here are CART (rpart), Random Forest, Support Vector Machine (Radial), Linear Discriminant Analysis and Naive Bayes. Parallel processing should be enabled as Random Forest and SVM are very processing intensive. A trainControl object is created to allow all models use the same control parameters such as enabling parallel processing and using 10 fold cross validation.
+We will compare multiple models to find the most accurate model for predicting classe based on the accellerometer readings. Models compared here are CART (rpart), Random Forest, Support Vector Machine (Radial), and Linear Discriminant Analysis. Parallel processing should be enabled as Random Forest and SVM are very processing intensive. A trainControl object is created to allow all models use the same control parameters such as enabling parallel processing and using 10 fold cross validation.
 
-```{r cache=TRUE}
+```{r cache=TRUE, message=FALSE}
 cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
 registerDoParallel(cluster)
 fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE, preProcOptions="pca")
 
 modrf <- train(classe ~ ., data=trainset, method="rf", trControl = fitControl)
 modsvm <- train(classe ~ ., data=trainset, method="svmRadial", trControl = fitControl)
-modnb <- train(classe ~ ., data=trainset, method="nb", trControl = fitControl)
 modlda <- train(classe ~ ., data=trainset, method="lda", trControl = fitControl)
 modrpart <- train(classe ~ ., data=trainset, method="rpart", trControl = fitControl)
 ```
@@ -79,12 +78,11 @@ Here is comparison of the Accuracy of these models using Validation data set:
 ```{r cache=TRUE}
 rfa <- confusionMatrix(validation$classe, predict(modrf, validation))$overall['Accuracy']
 svma <- confusionMatrix(validation$classe, predict(modsvm, validation))$overall['Accuracy']
-nba <- confusionMatrix(validation$classe, predict(modnb, validation))$overall['Accuracy']
 ldaa <- confusionMatrix(validation$classe, predict(modlda, validation))$overall['Accuracy']
 rparta <- confusionMatrix(validation$classe, predict(modrpart, validation))$overall['Accuracy']
 
-model <- c("Random Forest", "SVM Radial", "Naive Bayes", "Linear Discriminant Analysis", "CART")
-Accuracy <- c(rfa, svma, nba, ldaa, rparta)
+model <- c("Random Forest", "SVM Radial", "Linear Discriminant Analysis", "CART")
+Accuracy <- c(rfa, svma, ldaa, rparta)
 cbind(model, Accuracy)
 ```
 
